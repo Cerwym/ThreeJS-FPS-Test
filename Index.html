@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>0901632</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+    <style>
+        body {
+            color: #F0F8FF;
+            font-family:Monospace;
+            font-size:13px;
+            text-align:center;
+            font-weight: bold;
+
+            background-color: #000000;
+            margin: 0px;
+            overflow: hidden;
+        }
+
+        #topText {
+            color:#F0F8FF;
+            position: absolute;
+            top: 0px; width: 100%;
+            padding: 5px;
+        }
+
+        #mouseControl {
+
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+
+        }
+
+        #level {
+            position: absolute;
+            bottom: 0px;
+            left: 0px;
+            padding: 4px;
+            color: yellow;
+            font-weight: bold;
+        }
+
+        #playerPosition {
+            position: absolute;
+            bottom: 0px;
+            right: 0px;
+            padding: 4px;
+            color: yellow;
+            font-weight: bold;
+        }
+
+        #pTimer {
+            position: absolute;
+            top: 0px;
+            right: 0px;
+            padding: 4px;
+            color: yellow;
+            font-weight: bold;
+        }
+
+
+        #instructions {
+
+            width: 100%;
+            height: 100%;
+
+            display: -webkit-box;
+            display: -moz-box;
+            display: box;
+
+            -webkit-box-orient: horizontal;
+            -moz-box-orient: horizontal;
+            box-orient: horizontal;
+
+            -webkit-box-pack: center;
+            -moz-box-pack: center;
+            box-pack: center;
+
+            -webkit-box-align: center;
+            -moz-box-align: center;
+            box-align: center;
+
+            font-family:Monospace;
+            color: #F0F8FF;
+            text-align: center;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+<div id="container">
+    <audio id="bgmusic" src="sounds/dungeon.mp3" type = "audio/mpeg" preload="true"/>
+</div>
+
+<div id="level">
+    Level 1
+</div>
+<div id="playerPosition">
+    0,0,0
+</div>
+<div id="pTimer">
+    0
+</div>
+<div id="topText">
+    <a href="http://peterlockett.co.uk" target="_blank">0901632</a> - Emergent Technologies coursework</br>
+</div>
+
+<div id="mouseControl">
+
+    <div id="instructions">
+        <span style="font-size:24px">Click to start</span>
+        <br />
+        Look with mouse, WASD to move.<br>Hide and seek! (really, just seek.)
+    </div>
+
+</div>
+    <script src="js/Detector.js"></script>
+    <script src="js/three.js"></script>
+    <script src="js/cannon.js"></script>
+    <script src="js/controls/PointerLockControls.js"></script>
+    <script src="js/Stats.js"></script>
+    <script src="js/SceneObjects.js"></script>
+    <script src="js/Player.js"></script>
+    <script src="js/Maze.js"></script>
+    <script src='js/jquery-1.9.1.min.js'></script>
+    <script src="js/renderers/WebGLDeferredRenderer.js"></script>
+    <script src="js/ShaderDeferred.js"></script>
+
+    <script src="js/shaders/CopyShader.js"></script>
+    <script src="js/shaders/FXAAShader.js"></script>
+
+    <script src="js/postprocessing/EffectComposer.js"></script>
+    <script src="js/postprocessing/RenderPass.js"></script>
+    <script src="js/postprocessing/ShaderPass.js"></script>
+    <script src="js/postprocessing/MaskPass.js"></script>
+
+    <script src="js/loaders/OBJLoader.js"></script>
+
+
+    <script type="text/javascript">
+
+    var camera, scene, renderer, material, mesh, container, stats;
+    var groundmesh,groundmaterial, light;
+    var world, physicsMaterial, geometry;
+    var controls,time = Date.now();
+
+    // Objects from classes.
+    var cube, floor, skyBox, Player;
+    var maze;
+    var timer = 0;
+
+    var mouseControl = document.getElementById( 'mouseControl' );
+    var instructions = document.getElementById( 'instructions' );
+
+    var havePointerLock = 'pointerLockElement' in document || 'mozPointerLockElement' in document || 'webkitPointerLockElement' in document;
+
+    if ( havePointerLock ) {
+
+        var element = document.body;
+
+        var pointerlockchange = function ( event ) {
+
+            if ( document.pointerLockElement === element || document.mozPointerLockElement === element || document.webkitPointerLockElement === element ) {
+
+                controls.enabled = true;
+                mouseControl.style.display = 'none';
+
+            } else {
+
+                controls.enabled = false;
+
+                mouseControl.style.display = '-webkit-box';
+                mouseControl.style.display = '-moz-box';
+                mouseControl.style.display = 'box';
+
+                instructions.style.display = '';
+            }
+        }
+
+        var pointerlockerror = function ( event ) {
+            instructions.style.display = '';
+        }
+
+        // Hook pointer lock state change events
+        document.addEventListener( 'pointerlockchange', pointerlockchange, false );
+        document.addEventListener( 'mozpointerlockchange', pointerlockchange, false );
+        document.addEventListener( 'webkitpointerlockchange', pointerlockchange, false );
+
+        document.addEventListener( 'pointerlockerror', pointerlockerror, false );
+        document.addEventListener( 'mozpointerlockerror', pointerlockerror, false );
+        document.addEventListener( 'webkitpointerlockerror', pointerlockerror, false );
+
+        instructions.addEventListener( 'click', function ( event ) {
+            instructions.style.display = 'none';
+
+            // Ask the browser to lock the pointer
+            element.requestPointerLock = element.requestPointerLock || element.mozRequestPointerLock || element.webkitRequestPointerLock;
+
+            if ( /Firefox/i.test( navigator.userAgent ) ) {
+
+                var fullscreenchange = function ( event ) {
+
+                    if ( document.fullscreenElement === element || document.mozFullscreenElement === element || document.mozFullScreenElement === element ) {
+
+                        document.removeEventListener( 'fullscreenchange', fullscreenchange );
+                        document.removeEventListener( 'mozfullscreenchange', fullscreenchange );
+
+                        element.requestPointerLock();
+                    }
+
+                }
+
+                document.addEventListener( 'fullscreenchange', fullscreenchange, false );
+                document.addEventListener( 'mozfullscreenchange', fullscreenchange, false );
+
+                element.requestFullscreen = element.requestFullscreen || element.mozRequestFullscreen || element.mozRequestFullScreen || element.webkitRequestFullscreen;
+
+                element.requestFullscreen();
+
+            } else {
+
+                element.requestPointerLock();
+
+            }
+
+        }, false );
+
+    } else {
+
+        instructions.innerHTML = 'Your browser doesn\'t seem to support Pointer Lock API'  + '\nThis application will not function properly';
+    }
+
+    if ( ! Detector.webgl ) Detector.addGetWebGLMessage();
+
+    var SCALE = 1;
+    var MARGIN = 100;
+
+    var WIDTH = window.innerWidth;
+    var HEIGHT = window.innerHeight - 2 * MARGIN;
+
+
+    initPhysics();
+    init();
+    animate();
+
+    function initPhysics(){
+        // Setup the scene
+        scene = new THREE.Scene();
+        // Setup our world
+        world = new CANNON.World();
+        world.quatNormalizeSkip = 0;
+        world.quatNormalizeFast = false;
+
+        var solver = new CANNON.GSSolver();
+
+        world.defaultContactMaterial.contactEquationStiffness = 1e9;
+        world.defaultContactMaterial.contactEquationRegularizationTime = 4;
+
+        solver.iterations = 7;
+        solver.tolerance = 0.1;
+        var split = true;
+        if(split)
+            world.solver = new CANNON.SplitSolver(solver);
+        else
+            world.solver = solver;
+
+        world.gravity.set(0,-30,0);
+        world.broadphase = new CANNON.NaiveBroadphase();
+
+        // Create a slippery material (friction coefficient = 0.0)
+        physicsMaterial = new CANNON.Material("slipperyMaterial");
+        var physicsContactMaterial = new CANNON.ContactMaterial(physicsMaterial,
+                physicsMaterial,
+                0.0, // friction coefficient
+                0.3  // restitution
+        );
+        // We must add the contact materials to the world
+        world.addContactMaterial(physicsContactMaterial);
+
+        var groundShape = new CANNON.Plane();
+        var groundBody = new CANNON.RigidBody(0,groundShape,physicsMaterial);
+        groundBody.quaternion.setFromAxisAngle(new CANNON.Vec3(1,0,0),-Math.PI/2);
+        world.add(groundBody);
+    }
+
+    function init()
+    {
+        renderer = new THREE.WebGLDeferredRenderer( { width: WIDTH, height: HEIGHT, scale: SCALE, antialias: true } );
+        Player = new Player(scene, world);
+        Player.Update();
+
+        container = document.getElementById( 'container' );
+
+        //camera = new THREE.PerspectiveCamera( VIEW_ANGLE, WIDTH / HEIGHT, NEAR, FAR );
+        camera = new THREE.PerspectiveCamera(60.0, window.innerWidth / window.innerHeight, 1.0, 350.0);
+        camera.position.set(1,1,1);
+
+        skyBox = new SkyBox2();
+
+        scene.add(skyBox);
+        scene.fog = new THREE.Fog(0x000000, 0, 24);
+
+        // Remove this, make it better
+        var light = new THREE.DirectionalLight(0xFFFFFF, 0.2);
+        light.position.set(8, 8, 8);
+        scene.add( light );
+
+        light = new THREE.DirectionalLight(0xFFFFFF, 0.2);
+        light.position.set(-8, -8, -8);
+        scene.add( light );
+
+        cube = new Cube(10, 10, 10, 0, 25, 0);
+        cube.applyTexture("./images/diffus.png");
+        scene.add(cube);
+
+        controls = new PointerLockControls(camera, Player.getPhysOBJ());
+        scene.add(controls.getObject());
+
+        // Floor
+        floor = new Floor();
+        scene.add(floor);
+
+        renderer = new THREE.WebGLRenderer( { clearColor: 0x000000, clearAlpha: 1, antialias: true } );
+
+        renderer.setSize( window.innerWidth, window.innerHeight );
+        document.body.appendChild( renderer.domElement );
+
+        window.addEventListener( 'resize', resize, false );
+
+        // stats
+        stats = new Stats();
+        stats.domElement.style.position = 'absolute';
+        stats.domElement.style.top = '0px';
+        container.appendChild( stats.domElement );
+
+        var texture = new THREE.Texture();
+
+        var loader = new THREE.ImageLoader();
+        loader.addEventListener( 'load', function ( event ) {
+
+            texture.image = event.content;
+            texture.needsUpdate = true;
+        } );
+        loader.load('models/lamp_mat.png');
+
+        // model
+        var xpos = 8, ypos = 2.75, zpos = 8;
+        var loader = new THREE.OBJLoader();
+        loader.addEventListener( 'load', function ( event ) {
+
+            var object = event.content;
+
+            object.traverse( function ( child ) {
+
+                if ( child instanceof THREE.Mesh ) {
+
+                    child.material.map = texture;
+
+                }
+
+            } );
+            object.scale.x = .1;
+            object.scale.y = .1;
+            object.scale.z = .1;
+            object.position.x = xpos;
+            object.position.y = 0;
+            object.position.z = zpos;
+            scene.add( object );
+            var map = object.children[0].material.map;
+
+        });
+        loader.load('models/Lamp.obj');
+
+        var torch = new THREE.PointLight( 0xffffff, 3.0, 10);
+        torch.position.x = xpos;
+        torch.position.y = ypos;
+        torch.position.z = zpos;
+
+        scene.add(torch);
+
+        maze = new MazeManager2();
+        maze.constructMaze(scene, world);
+
+        document.getElementById('bgmusic').play();
+        document.getElementById('bgmusic').addEventListener('ended', function(){this.currentTime = 0; this.play();console.log("Audio repeated")}, false);
+
+    }
+    var dt = 1/60;
+    function animate()
+    {
+        requestAnimationFrame(animate);
+        if(controls.enabled)
+        {
+            world.step(dt);
+            cube.rotate(0.01, 0.02, 0);
+            stats.update();
+            Player.Update();
+            timer += 0.05;
+            if (Player.DistanceFrom(maze.Exit) <= 1.5)
+            {
+                console.log("Maze Deleted");
+
+                maze.DeleteLevel(scene, world);
+                Player.Level = 2;
+                maze.constructMaze(scene, world);
+                Player.SetPosition(8, 4, 10);
+            }
+        }
+        controls.update(Date.now() - time);
+        renderer.render( scene, camera );
+        skyBox.update(Player.Position());
+        time = Date.now();
+
+        // use jquery to update the level field in the innerhtml, in a 'cross-platform way'
+        $("#level").html('Level ' + Player.Level);
+        $("#playerPosition").html('Position : ' + Player.DistanceFrom(maze.Exit));
+        $("#pTimer").html('Score : ' + Math.floor(timer));
+    }
+
+    function resize() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize( window.innerWidth, window.innerHeight );
+    }
+
+    </script>
+</body>
+</html>
